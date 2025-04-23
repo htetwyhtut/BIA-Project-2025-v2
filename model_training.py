@@ -303,6 +303,24 @@ class DateRecommendationSystem:
         # Load processed place data
         if os.path.exists(self.place_df_path):
             self.place_df = pd.read_csv(self.place_df_path)
+            # — PRECOMPUTE FOR SPEED —
+            # 1) feature matrix for all places
+            # feature_cols = [
+            #     'rating','price_level','cost_normalized','sentiment_score',
+            #     'casual_dining','fancy_dining','bar','nightlife',
+            #     'activity','culture','outdoors','shopping'
+            # ]
+            feature_cols = [
+                'rating','price_level','sentiment_score','casual_dining','fancy_dining', 'bar','nightlife','activity','culture','outdoors','shopping'
+                ]
+            self._place_matrix = self.place_df[feature_cols].to_numpy()
+            # 2) row‐norms for fast cosine sims
+            self._place_norms  = np.linalg.norm(self._place_matrix, axis=1)
+            # 3) cache cost‐scaler bounds for inline normalization
+            self._cost_min, self._cost_max = (
+            self.scalers['cost'].data_min_[0],
+            self.scalers['cost'].data_max_[0]
+    )
         else:
             raise FileNotFoundError("Processed place data not found. Please train the model first.")
         
@@ -361,7 +379,7 @@ class DateRecommendationSystem:
             rel_weights = self.relationship_interest_mapping["default"]
         
         # Filter based on budget
-        budget_normalized = self.scalers['cost'].transform([[budget]])[0][0]
+        budget_normalized = (budget - self._cost_min) / (self._cost_max - self._cost_min)
         budget_filtered_df = self.place_df[self.place_df['max_cost'] <= budget]
         
         # If no places within budget, take the 25% cheapest places
@@ -406,44 +424,95 @@ class DateRecommendationSystem:
             user_interest_vector = user_interest_vector / np.sum(user_interest_vector)
         
         # Calculate similarity scores
-        for idx, row in district_filtered_df.iterrows():
-            # Build place vector
-            place_features = [
-                row['rating'], row['price_level'], row['sentiment_score'],
-                row['casual_dining'], row['fancy_dining'], row['bar'], row['nightlife'],
-                row['activity'], row['culture'], row['outdoors'], row['shopping']
-            ]
-            place_vector = np.array(place_features)
+        # for idx, row in district_filtered_df.iterrows():
+        #     # Build place vector
+        #     place_features = [
+        #         row['rating'], row['price_level'], row['sentiment_score'],
+        #         row['casual_dining'], row['fancy_dining'], row['bar'], row['nightlife'],
+        #         row['activity'], row['culture'], row['outdoors'], row['shopping']
+        #     ]
+        #     place_vector = np.array(place_features)
             
-            # Calculate direct interest match boost
-            interest_match_boost = 0
-            for interest in interests:
-                interest_col = f"interest_{interest}"
-                if interest_col in row.index and row[interest_col] == 1:
-                    # Apply relationship weight if available
-                    interest_match_boost += rel_weights.get(interest, rel_weights.get("default", 0.5))
+        #     # Calculate direct interest match boost
+        #     interest_match_boost = 0
+        #     for interest in interests:
+        #         interest_col = f"interest_{interest}"
+        #         if interest_col in row.index and row[interest_col] == 1:
+        #             # Apply relationship weight if available
+        #             interest_match_boost += rel_weights.get(interest, rel_weights.get("default", 0.5))
             
-            # Calculate cosine similarity
-            if np.sum(place_vector) > 0:  # Avoid division by zero
-                similarity = cosine_similarity([user_interest_vector], [place_vector])[0][0]
-            else:
-                similarity = 0
+        #     # Calculate cosine similarity
+        #     if np.sum(place_vector) > 0:  # Avoid division by zero
+        #         similarity = cosine_similarity([user_interest_vector], [place_vector])[0][0]
+        #     else:
+        #         similarity = 0
                 
-            # Combined score with various factors
-            # - Base similarity from interests
-            # - Bonus for direct interest matches
-            # - Rating factor
-            # - Small random component for variety
-            combined_score = (
-                0.4 * similarity + 
-                0.3 * interest_match_boost + 
-                0.2 * (row['rating'] / 5.0) + 
-                0.05 * (1 - abs(budget_normalized - row['cost_normalized'])) +
-                0.05 * random.random()  # Add slight randomness
-            )
+        #     # Combined score with various factors
+        #     # - Base similarity from interests
+        #     # - Bonus for direct interest matches
+        #     # - Rating factor
+        #     # - Small random component for variety
+        #     combined_score = (
+        #         0.4 * similarity + 
+        #         0.3 * interest_match_boost + 
+        #         0.2 * (row['rating'] / 5.0) + 
+        #         0.05 * (1 - abs(budget_normalized - row['cost_normalized'])) +
+        #         0.05 * random.random()  # Add slight randomness
+        #     )
+            # — VECTORIZED SCORING —  
+        df = district_filtered_df.reset_index(drop=True)
+        idxs = district_filtered_df.index.to_numpy()
+
+        # 1) Normalize user interest vector
+        uiv = user_interest_vector
+        norm = np.linalg.norm(uiv)
+        if norm > 0:
+            uiv = uiv / norm
+
+        # 2) Cosine similarities in one go
+        mat  = self._place_matrix[idxs]
+        norms = self._place_norms[idxs]
+        sims = mat @ uiv
+        sims = sims / (norms + 1e-8)
+
+        # 3) Interest‐match boost
+        boosts = np.zeros(len(df))
+        for interest in interests:
+            col = f"interest_{interest}"
+            if col in df:
+                boosts += df[col].to_numpy() * rel_weights.get(interest, rel_weights['default'])
+
+        # 4) Rating factor
+        ratings = df['rating'].to_numpy() / 5.0
+
+        # 5) Budget alignment
+        costs   = df['cost_normalized'].to_numpy()
+        bud_align = 1 - np.abs(budget_normalized - costs)
+
+        # 6) Tiny randomness
+        rand = np.random.rand(len(df))
+
+        # 7) Combine all per your weights
+        w = self.SCORING_WEIGHTS
+        scores = (w['similarity']      * sims +
+                w['interest_match']  * boosts +
+                w['rating']          * ratings +
+                w['budget_alignment']* bud_align +
+                w['randomness']      * rand)
+
+        # 8) Fast top‐2×K selection
+        top2x = np.argpartition(scores, -num_recommendations*2)[-num_recommendations*2:]
+        candidates = df.iloc[top2x].copy()
+
+        # 9) Diversity filter on just those rows
+        final_df = self._ensure_diversity(candidates, num_recommendations)
+
+        # 10) Return only the columns you need
+        return final_df[['name','district','interest','rating','max_cost','maps_url']]
+
             
             
-            interest_scores.append((idx, combined_score))
+        #     interest_scores.append((idx, combined_score))
         
         # Sort by score and get top recommendations
         sorted_scores = sorted(interest_scores, key=lambda x: x[1], reverse=True)
