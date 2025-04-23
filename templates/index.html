@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>BKK Date Finder</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link
+    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css"
+    rel="stylesheet">
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <style>
+    /* — then paste these at the end — */
+    .interest-tag {
+      display: inline-block;
+      background-color: #f8f9fa;
+      border: 1px solid #e0e0e0;
+      border-radius: 2rem;
+      padding: 0.5rem 1rem;
+      margin: 0.25rem;
+      cursor: pointer;
+      color: var(--dark-color) !important;   /* make un-selected text visible */
+      transition: background-color 0.2s;
+    }
+    .interest-tag:hover {
+      background-color: #e9ecef;
+    }
+    .interest-tag.active {
+      background-color: var(--primary-color);
+      border-color: var(--primary-color);
+      color: white !important;               /* selected text stays white */
+    }
+  </style>
+
+</head>
+<body>
+<nav class="navbar navbar-expand-lg sticky-top bg-white shadow-sm mb-4">
+  <div class="container">
+    <a class="navbar-brand text-danger" href="#">BKK Date Finder</a>
+  </div>
+</nav>
+
+<header class="header-section text-white text-center py-5 mb-4"
+        style="background: linear-gradient(135deg,#ff6b6b,#ff9f1c);">
+  <div class="container">
+    <h1 class="display-5 fw-bold">Find Your Perfect Date Spot in Bangkok</h1>
+    <p class="lead">We’ll match you to the best venues based on your style, budget and more.</p>
+    <a href="#finder" class="btn btn-light btn-lg rounded-pill">Tell Me More</a>
+  </div>
+</header>
+
+<div class="container" id="finder">
+  <div class="row justify-content-center">
+    <div class="col-lg-8">
+      <div class="card mb-4">
+        <div class="card-body">
+          <h3 class="card-title text-center mb-4">Tell Us About Your Date</h3>
+          <form id="recommendationForm">
+            <div class="row mb-3">
+              <div class="col-md-6">
+                <label for="relationshipType" class="form-label">Relationship Type</label>
+                <select id="relationshipType" class="form-select" required>
+                  <option value="romance">Romantic</option>
+                  <option value="friends">Friends</option>
+                  <option value="family">Family</option>
+                  <option value="siblings">Siblings</option>
+                  <option value="colleagues">Colleagues</option>
+                </select>
+              </div>
+              <div class="col-md-6">
+                <label for="budget" class="form-label">Budget (THB)</label>
+                <input type="range" id="budget" class="form-range"
+                       min="500" max="5000" step="100" value="2000">
+                <div class="text-center text-danger fw-bold">
+                  <span id="budgetValue">2000</span> THB
+                </div>
+              </div>
+            </div>
+
+            <div class="row mb-3">
+              <!-- Your info -->
+              <div class="col-md-6">
+                <div class="card h-100">
+                  <div class="card-body">
+                    <h5>Your Info</h5>
+                    <div class="mb-2">
+                      <label class="form-label">Gender</label><br>
+                      <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="userGender" value="m" checked>
+                        <label class="form-check-label">Male</label>
+                      </div>
+                      <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="userGender" value="f">
+                        <label class="form-check-label">Female</label>
+                      </div>
+                    </div>
+                    <div>
+                      <label for="userAge" class="form-label">Age</label>
+                      <input type="number" id="userAge" class="form-control" min="18" max="100" value="25">
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <!-- Partner info -->
+              <div class="col-md-6">
+                <div class="card h-100">
+                  <div class="card-body">
+                    <h5>Partner Info</h5>
+                    <div class="mb-2">
+                      <label class="form-label">Gender</label><br>
+                      <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="partnerGender" value="m">
+                        <label class="form-check-label">Male</label>
+                      </div>
+                      <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="partnerGender" value="f" checked>
+                        <label class="form-check-label">Female</label>
+                      </div>
+                    </div>
+                    <div>
+                      <label for="partnerAge" class="form-label">Age</label>
+                      <input type="number" id="partnerAge" class="form-control" min="18" max="100" value="25">
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="mb-3">
+              <label for="district" class="form-label">Preferred District</label>
+              <select id="district" class="form-select">
+                <option value="">Any</option>
+              </select>
+            </div>
+
+            <div class="mb-4">
+              <label class="form-label d-block mb-2">Interests (click to select)</label>
+              <div id="interestsContainer" class="d-flex flex-wrap gap-2">
+                <!-- tags go here -->
+              </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary w-100">Find Spots</button>
+          </form>
+        </div>
+      </div>
+
+      <div id="resultsContainer" style="display:none;">
+        <h2 class="section-title text-center mb-4">Recommended Places</h2>
+        <div class="row" id="recommendationsGrid"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+$(function(){
+  // 1) fetch dropdown data
+  $.get('/api/districts', d=> {
+    d.districts.forEach(dt => {
+      $('#district').append(`<option>${dt}</option>`);
+    });
+  });
+
+  $.get('/api/interests', d => {
+    d.interests
+    .filter(i => i.toLowerCase() !== 'speakeasy')
+    .forEach(i => {
+        $('#interestsContainer')
+        .append(`<div class="interest-tag badge …" data-value="${i}">${i}</div>`);
+    });
+    });
+
+
+  // 2) budget slider
+  $('#budget').on('input change', e => $('#budgetValue').text(e.target.value));
+
+  // 3) interest tag toggle
+  $(document).on('click', '.interest-tag', function(){
+    $(this).toggleClass('active bg-danger text-white');
+  });
+
+  // 4) form submit
+  $('#recommendationForm').submit(function(e){
+    e.preventDefault();
+    const payload = {
+      relationship_type: $('#relationshipType').val(),
+      user_gender:       $('input[name="userGender"]:checked').val(),
+      partner_gender:    $('input[name="partnerGender"]:checked').val(),
+      user_age:          $('#userAge').val(),
+      partner_age:       $('#partnerAge').val(),
+      budget:            $('#budget').val(),
+      district:          $('#district').val(),
+      interests:         $('.interest-tag.active').map((_,el)=>$(el).data('value')).get()
+    };
+    if(!payload.interests.length){
+      alert('Please pick at least one interest.');
+      return;
+    }
+    $.ajax({
+      url: '/api/recommend',
+      method: 'POST',
+      contentType: 'application/json',
+      data: JSON.stringify(payload),
+      success: function(res){
+        $('#recommendationsGrid').empty();
+        res.recommendations.forEach(r => {
+          $('#recommendationsGrid').append(`
+            <div class="col-md-6 col-lg-4 mb-4">
+              <div class="card h-100">
+                <div class="card-body">
+                  <h5 class="card-title">${r.name}</h5>
+                  <p class="text-muted mb-1">District: ${r.district}</p>
+                  <span class="badge bg-danger mb-2">${r.interest}</span>
+                  <p class="mb-1">Rating: <strong>${r.rating.toFixed(1)}</strong></p>
+                  <p>Max Cost: <strong>${r.max_cost} THB</strong></p>
+                </div>
+                <div class="card-footer">
+                  <a href="${r.maps_url}" target="_blank" class="btn btn-sm btn-outline-secondary w-100">
+                    View on Google Maps
+                  </a>
+                </div>
+              </div>
+            </div>`);
+        });
+        $('#resultsContainer').show();
+        // scroll to results
+        $('html, body').animate({ scrollTop: $('#resultsContainer').offset().top - 80 }, 500);
+      }
+    });
+  });
+});
+</script>
+</body>
+</html>
