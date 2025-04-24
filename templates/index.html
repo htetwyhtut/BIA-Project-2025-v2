@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>BKK Date Finder</title>
+  <title>BKK Date Planner</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <link
     href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css"
@@ -29,15 +29,30 @@
       border-color: var(--primary-color);
       color: white !important;               /* selected text stays white */
     }
+
+    .navbar-brand img {
+      vertical-align: middle;
+      height: 32px;       /* adjust to taste */
+      margin-right: 8px;  /* space between logo & text */
+    }
   </style>
 
 </head>
 <body>
+
 <nav class="navbar navbar-expand-lg sticky-top bg-white shadow-sm mb-4">
   <div class="container">
-    <a class="navbar-brand text-danger" href="#">BKK Date Finder</a>
+    <a class="navbar-brand d-flex align-items-center" href="#">
+      <img
+        src="{{ url_for('static', filename='logo.png') }}"
+        alt="AI Date Planner Logo"
+        style="height:100px; width:auto; margin-right:12px;"
+      >
+      <span class="text-danger">BKK Date Planner</span>
+    </a>
   </div>
 </nav>
+
 
 <header class="header-section text-white text-center py-5 mb-4"
         style="background: linear-gradient(135deg,#ff6b6b,#ff9f1c);">
@@ -92,6 +107,10 @@
                         <input class="form-check-input" type="radio" name="userGender" value="f">
                         <label class="form-check-label">Female</label>
                       </div>
+                      <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="userGender" id="userGenderOther"  value="o">
+                        <label class="form-check-label" for="userGenderOther">Other</label>
+                      </div>
                     </div>
                     <div>
                       <label for="userAge" class="form-label">Age</label>
@@ -108,13 +127,17 @@
                     <div class="mb-2">
                       <label class="form-label">Gender</label><br>
                       <div class="form-check form-check-inline">
-                        <input class="form-check-input" type="radio" name="partnerGender" value="m">
-                        <label class="form-check-label">Male</label>
+                        <input class="form-check-input" type="radio" name="partnerGender" id="partnerGenderMale" value="m">
+                        <label class="form-check-label" for="partnerGenderMale">Male</label>
                       </div>
                       <div class="form-check form-check-inline">
-                        <input class="form-check-input" type="radio" name="partnerGender" value="f" checked>
-                        <label class="form-check-label">Female</label>
+                        <input class="form-check-input" type="radio" name="partnerGender" id="partnerGenderFemale" value="f" checked>
+                        <label class="form-check-label" for="partnerGenderFemale">Female</label>
                       </div>
+                      <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="partnerGender" id="partnerGenderOther" value="o">
+                        <label class="form-check-label" for="partnerGenderOther">Other</label>
+                      </div>                      
                     </div>
                     <div>
                       <label for="partnerAge" class="form-label">Age</label>
